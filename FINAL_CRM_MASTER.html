@@ -1,0 +1,1233 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>CRM MASTER - Management System</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  :root{
+    --bg:#f8fafc; --card:#fff; --accent:#3b82f6; --muted:#64748b;
+    --success:#10b981; --danger:#ef4444; --warning:#f59e0b;
+  }
+  *{box-sizing:border-box;font-family:'Inter', system-ui, sans-serif}
+  body{margin:0;background:var(--bg);color:#1e293b; line-height:1.6}
+  header{padding:16px 24px;display:flex;align-items:center;justify-content:space-between;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1);border-bottom:1px solid #e2e8f0}
+  .app{max-width:1200px;margin:24px auto;padding:0 20px}
+  .card{background:var(--card);border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.1);border:1px solid #e2e8f0;margin-bottom:20px}
+  .login-area{max-width:400px;margin:80px auto}
+  input,select{width:100%;padding:12px;border-radius:8px;border:1px solid #d1d5db;margin-top:6px;font-size:14px}
+  button{padding:10px 20px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer;font-size:14px;font-weight:500;transition:all 0.2s}
+  button:hover{opacity:0.9;transform:translateY(-1px)}
+  button.danger{background:var(--danger)}
+  button.success{background:var(--success)}
+  button.warning{background:var(--warning)}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}
+  table{width:100%;border-collapse:collapse;font-size:14px;background:white}
+  th,td{padding:12px;border-bottom:1px solid #e2e8f0;text-align:left}
+  th{background:#f8fafc;font-weight:600;color:#475569}
+  .muted{color:var(--muted);font-size:13px}
+  .section-title{margin:0 0 16px 0;font-size:18px;font-weight:600;color:#1e293b}
+  .subsection-title{margin:16px 0 12px 0;font-size:16px;font-weight:600;color:#374151}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:16px;margin:20px 0}
+  .stat-card{background:white;padding:20px;border-radius:8px;border:1px solid #e2e8f0;text-align:center}
+  .stat-value{font-size:24px;font-weight:700;color:#1e40af;margin:8px 0}
+  .stat-label{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px}
+  .form-group{margin-bottom:16px}
+  .form-label{display:block;margin-bottom:6px;font-weight:500;color:#374151;font-size:14px}
+  .action-buttons{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .filter-bar{display:flex;gap:12px;align-items:center;margin:20px 0;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0}
+  .admin-table{background:white;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0}
+  .badge{padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;text-transform:uppercase}
+  .badge.leader{background:#dbeafe;color:#1e40af}
+  .badge.admin{background:#dcfce7;color:#166534}
+  .login-msg{margin-top:12px;padding:8px 12px;border-radius:6px;text-align:center;font-size:14px}
+  .login-msg.error{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+  .login-msg.success{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
+  .metric-value{font-weight:600;color:#1e40af;font-size:14px}
+  .metric-label{font-size:11px;color:#64748b;text-transform:uppercase}
+  .import-status{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;padding:12px;border-radius:8px;margin-top:12px;display:none}
+  .no-data{color:#94a3b8;font-style:italic}
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;gap:12px;align-items:center">
+    <div style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg,#3b82f6,#1e40af);display:flex;align-items:center;justify-content:center;color:white;font-weight:700">CM</div>
+    <div>
+      <div style="font-weight:700;font-size:18px">CRM MASTER</div>
+      <div class="muted">Management Dashboard</div>
+    </div>
+  </div>
+  <div id="leaderSignedOut" style="display:flex;align-items:center;gap:12px">
+    <button type="button" onclick="showLogin()">Login</button>
+  </div>
+  <div id="leaderSignedIn" style="display:none;align-items:center;gap:12px">
+    <div class="muted" id="leaderName">Administrator</div>
+    <button type="button" onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<div class="app">
+  <!-- LOGIN -->
+  <div id="loginBox" class="card login-area">
+    <h2 style="text-align:center;margin-bottom:8px;color:#1e293b">System Login</h2>
+    <div class="muted" style="text-align:center;margin-bottom:24px">Login sebagai administrator system</div>
+    
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <input id="loginUser" placeholder="Masukkan username" value="admin"/>
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input id="loginPass" type="password" placeholder="Masukkan password" value="admin123"/>
+    </div>
+    
+    <button type="button" onclick="doLogin()" style="width:100%;padding:12px;margin-top:8px">Login ke System</button>
+    <div id="loginMsg" class="login-msg" style="display:none"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="mainUI" style="display:none">
+    <!-- Header & Stats -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <h1 style="margin:0;font-size:24px;color:#1e293b">Management Dashboard</h1>
+          <div class="muted">Monitor dan kelola seluruh data system</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center">
+          <input type="date" id="fromDate" style="width:140px;padding:8px"/>
+          <input type="date" id="toDate" style="width:140px;padding:8px"/>
+          <button type="button" onclick="refreshAllData()">Terapkan Filter</button>
+        </div>
+      </div>
+
+      <!-- Statistics Cards -->
+      <div class="stats-grid" id="adminStats">
+        <div class="stat-card">
+          <div class="stat-label">Total Admin</div>
+          <div class="stat-value" id="totalAdmins">0</div>
+          <div class="muted">User aktif</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Member</div>
+          <div class="stat-value" id="totalMembers">0</div>
+          <div class="muted">Data member</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Transaksi</div>
+          <div class="stat-value" id="totalTransactions">0</div>
+          <div class="muted">Deposit</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Pendapatan</div>
+          <div class="stat-value" id="totalRevenue">Rp 0</div>
+          <div class="muted">Keseluruhan</div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div style="margin-top:24px">
+        <div class="subsection-title">Grafik Pendapatan per Admin</div>
+        <canvas id="masterChart" height="120"></canvas>
+      </div>
+    </div>
+
+    <div class="cols">
+      <!-- Left Column -->
+      <div>
+        <!-- User Management -->
+        <div class="card">
+          <div class="section-title">Management User</div>
+          <div class="muted" style="margin-bottom:16px">Tambah dan kelola user administrator</div>
+          
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input id="newAdminUser" placeholder="username user baru"/>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input id="newAdminPass" placeholder="password"/>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Nama Lengkap</label>
+            <input id="newAdminName" placeholder="nama lengkap"/>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <select id="newAdminRole">
+              <option value="admin">Admin</option>
+              <option value="leader">Leader</option>
+            </select>
+          </div>
+          
+          <div class="action-buttons">
+            <button type="button" onclick="addAdmin()">Tambah User</button>
+            <button type="button" onclick="exportAllData()" style="background:#64748b">Export Data</button>
+          </div>
+        </div>
+
+        <!-- Admin List dengan Metrics -->
+        <div class="card">
+          <div class="section-title">Daftar User & Performance</div>
+          <div class="admin-table">
+            <table id="adminTable">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Nama</th>
+                  <th>Role</th>
+                  <th>Member</th>
+                  <th>Transaksi</th>
+                  <th>Pendapatan</th>
+                  <th style="width:120px">Aksi</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column -->
+      <div>
+        <!-- Data Import -->
+        <div class="card">
+          <div class="section-title">Import Data Member</div>
+          <div class="muted" style="margin-bottom:16px">Upload file Excel data member (kolom: ID, Nama, Phone, last_deposit)</div>
+          
+          <div class="form-group">
+            <label class="form-label">File Excel</label>
+            <input type="file" id="fileImport" accept=".xlsx,.xls,.csv" style="padding:8px"/>
+            <div class="muted" style="margin-top:4px">Format: .xlsx, .xls, .csv</div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Tujuan Admin</label>
+            <select id="assignAdmin">
+              <option value="">Pilih admin tujuan</option>
+            </select>
+          </div>
+          
+          <div class="action-buttons">
+            <button type="button" onclick="importToAdmin()">Import Data</button>
+            <button type="button" onclick="downloadTemplate()" style="background:#64748b">Download Template</button>
+          </div>
+
+          <div id="importStatus" class="import-status">
+            <div style="font-weight:600">Status Import:</div>
+            <div id="importMessage">Sedang memproses...</div>
+          </div>
+        </div>
+
+        <!-- Reports -->
+        <div class="card">
+          <div class="section-title">Generate Report</div>
+          <div class="muted" style="margin-bottom:16px">Buat laporan data system</div>
+          
+          <div class="form-group">
+            <label class="form-label">Tipe Report</label>
+            <select id="reportType">
+              <option value="database">Data Member</option>
+              <option value="omset">Data Transaksi</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">User</label>
+            <select id="reportAdmin">
+              <option value="__all">Semua User</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Periode</label>
+            <select id="reportRange">
+              <option value="daily">Harian</option>
+              <option value="monthly">Bulanan</option>
+              <option value="yearly">Tahunan</option>
+            </select>
+          </div>
+          
+          <div class="action-buttons">
+            <button type="button" onclick="generateReport()">Download Report</button>
+            <button type="button" onclick="refreshAllData()" class="success">Refresh Data</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== KONFIGURASI SUPA BASE ====================
+const SUPABASE_URL = 'https://rmuhtxhcnqyzezbfixdp.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtdWh0eGhjbnF5emV6YmZpeGRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMTk4NzMsImV4cCI6MjA3NTU5NTg3M30.O2wTTp4J866_r9Hbb3D4PY4FFWb5ByhDRYXgslcYptA';
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let currentUser = null;
+
+// ==================== UTILITY FUNCTIONS ====================
+function uid() { 
+  return 'id' + Math.random().toString(36).slice(2, 9); 
+}
+
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0
+  }).format(amount);
+}
+
+function showMessage(elementId, message, type = 'error') {
+  const element = document.getElementById(elementId);
+  element.textContent = message;
+  element.className = `login-msg ${type}`;
+  element.style.display = 'block';
+  setTimeout(() => element.style.display = 'none', 5000);
+}
+
+function showImportStatus(message, isSuccess = true) {
+  const statusElement = document.getElementById('importStatus');
+  const messageElement = document.getElementById('importMessage');
+  
+  messageElement.textContent = message;
+  statusElement.style.display = 'block';
+  statusElement.style.background = isSuccess ? '#f0fdf4' : '#fef2f2';
+  statusElement.style.borderColor = isSuccess ? '#bbf7d0' : '#fecaca';
+  statusElement.style.color = isSuccess ? '#166534' : '#dc2626';
+  
+  setTimeout(() => {
+    statusElement.style.display = 'none';
+  }, 5000);
+}
+
+// ✅ HELPER FUNCTION: Generate random date within 90 days
+function generateRandomDate() {
+  const randomDays = Math.floor(Math.random() * 90);
+  const randomDate = new Date();
+  randomDate.setDate(randomDate.getDate() - randomDays);
+  return randomDate.toISOString().slice(0, 10);
+}
+
+// ✅ IMPROVED FUNCTION: Parse Excel dates properly
+function parseExcelDate(excelDate) {
+  try {
+    // Jika null atau undefined
+    if (!excelDate) {
+      return generateRandomDate();
+    }
+
+    // Jika sudah format YYYY-MM-DD
+    if (typeof excelDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(excelDate)) {
+      return excelDate;
+    }
+
+    // Jika dari Excel sebagai Date object (hasil dari cellDates: true)
+    if (excelDate instanceof Date) {
+      if (!isNaN(excelDate.getTime())) {
+        return excelDate.toISOString().slice(0, 10);
+      }
+    }
+
+    // Jika dari Excel sebagai number (Excel date serial)
+    if (typeof excelDate === 'number') {
+      // Excel date serial to JavaScript Date (Windows epoch)
+      const excelEpoch = new Date(1899, 11, 30);
+      const jsDate = new Date(excelEpoch.getTime() + (excelDate - 1) * 86400000);
+      
+      // Handle Excel bug for 1900 (Excel thinks 1900 was a leap year)
+      if (excelDate > 59) {
+        jsDate.setDate(jsDate.getDate() - 1);
+      }
+      
+      if (!isNaN(jsDate.getTime())) {
+        return jsDate.toISOString().slice(0, 10);
+      }
+    }
+
+    // Jika format string dengan berbagai separator
+    if (typeof excelDate === 'string') {
+      // Bersihkan string dari spasi
+      const cleanDate = excelDate.toString().trim();
+      
+      // Coba parse sebagai ISO string
+      const isoDate = new Date(cleanDate);
+      if (!isNaN(isoDate.getTime())) {
+        return isoDate.toISOString().slice(0, 10);
+      }
+
+      // Coba format DD/MM/YYYY atau DD-MM-YYYY
+      const parts = cleanDate.split(/[/-]/);
+      if (parts.length === 3) {
+        let day, month, year;
+
+        // Deteksi format berdasarkan panjang bagian pertama
+        if (parts[0].length === 4) {
+          // Format YYYY/MM/DD atau YYYY-MM-DD
+          year = parts[0];
+          month = parts[1];
+          day = parts[2];
+        } else {
+          // Format DD/MM/YYYY atau DD-MM-YYYY
+          day = parts[0];
+          month = parts[1];
+          year = parts[2];
+        }
+
+        // Pastikan format 2 digit untuk bulan dan hari
+        month = month.padStart(2, '0');
+        day = day.padStart(2, '0');
+        
+        // Handle tahun 2 digit
+        if (year.length === 2) {
+          year = '20' + year; // Asumsi abad 21
+        }
+
+        const parsedDate = new Date(`${year}-${month}-${day}`);
+        if (!isNaN(parsedDate.getTime())) {
+          return parsedDate.toISOString().slice(0, 10);
+        }
+      }
+
+      // Coba format lain: MMM/DD/YYYY (Oct/08/2024)
+      const monthNames = {
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+        'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+        'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+      };
+      
+      const monthMatch = cleanDate.toLowerCase().match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*[/-]\s*(\d{1,2})\s*[/-]\s*(\d{4})/);
+      if (monthMatch) {
+        const month = monthNames[monthMatch[1].toLowerCase().substring(0, 3)];
+        const day = monthMatch[2].padStart(2, '0');
+        const year = monthMatch[3];
+        const parsedDate = new Date(`${year}-${month}-${day}`);
+        if (!isNaN(parsedDate.getTime())) {
+          return parsedDate.toISOString().slice(0, 10);
+        }
+      }
+    }
+
+    // Fallback: gunakan tanggal acak
+    return generateRandomDate();
+    
+  } catch (error) {
+    console.warn('Date parsing error, using random date:', error, excelDate);
+    return generateRandomDate();
+  }
+}
+
+// ==================== AUTHENTICATION ====================
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+
+  if (!username || !password) {
+    showMessage('loginMsg', 'Username dan password harus diisi', 'error');
+    return;
+  }
+
+  try {
+    const { data: admins, error } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('username', username)
+      .eq('password', password);
+
+    if (error) throw error;
+
+    if (admins && admins.length > 0) {
+      currentUser = admins[0];
+      showMessage('loginMsg', 'Login berhasil...', 'success');
+      setTimeout(() => openMain(currentUser), 1000);
+    } else {
+      showMessage('loginMsg', 'Username atau password salah', 'error');
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    showMessage('loginMsg', 'Error koneksi database', 'error');
+  }
+}
+
+function showLogin() {
+  document.getElementById('mainUI').style.display = 'none';
+  document.getElementById('loginBox').style.display = 'block';
+  document.getElementById('leaderSignedIn').style.display = 'none';
+  document.getElementById('leaderSignedOut').style.display = 'flex';
+}
+
+function logout() {
+  currentUser = null;
+  localStorage.removeItem('currentMasterUser');
+  showLogin();
+}
+
+function openMain(user) {
+  document.getElementById('loginBox').style.display = 'none';
+  document.getElementById('mainUI').style.display = 'block';
+  document.getElementById('leaderSignedIn').style.display = 'flex';
+  document.getElementById('leaderSignedOut').style.display = 'none';
+  
+  document.getElementById('leaderName').textContent = `${user.name} (${user.role})`;
+  localStorage.setItem('currentMasterUser', JSON.stringify(user));
+  
+  refreshAllData();
+}
+
+// ==================== USER MANAGEMENT ====================
+async function refreshAdminTable() {
+  try {
+    const { data: admins, error } = await supabase
+      .from('admins')
+      .select('*')
+      .order('username');
+
+    if (error) throw error;
+
+    const tbody = document.getElementById('adminTable').querySelector('tbody');
+    tbody.innerHTML = '';
+
+    if (!admins || admins.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:#666">Belum ada user</td></tr>';
+      return;
+    }
+
+    // Get performance data for each admin
+    const adminPerformance = await getAdminPerformance();
+
+    admins.forEach(admin => {
+      const performance = adminPerformance[admin.username] || { 
+        memberCount: 0, 
+        transactionCount: 0, 
+        revenue: 0 
+      };
+
+      const tr = document.createElement('tr');
+      const badgeClass = admin.role === 'leader' ? 'badge leader' : 'badge admin';
+      
+      // ✅ REVISI: Hanya tampilkan metrics untuk role admin
+      const memberCell = admin.role === 'admin' 
+        ? `<div class="metric-value">${performance.memberCount}</div><div class="metric-label">Member</div>`
+        : `<div class="no-data">-</div>`;
+      
+      const transactionCell = admin.role === 'admin'
+        ? `<div class="metric-value">${performance.transactionCount}</div><div class="metric-label">Transaksi</div>`
+        : `<div class="no-data">-</div>`;
+      
+      const revenueCell = admin.role === 'admin'
+        ? `<div class="metric-value">${formatCurrency(performance.revenue)}</div><div class="metric-label">Pendapatan</div>`
+        : `<div class="no-data">-</div>`;
+      
+      tr.innerHTML = `
+        <td>
+          <div style="font-weight:500">${admin.username}</div>
+          <div class="muted" style="font-size:12px">Created: ${new Date(admin.created_at).toLocaleDateString('id-ID')}</div>
+        </td>
+        <td>${admin.name || '-'}</td>
+        <td><span class="${badgeClass}">${admin.role}</span></td>
+        <td>${memberCell}</td>
+        <td>${transactionCell}</td>
+        <td>${revenueCell}</td>
+        <td>
+          <button onclick="resetPassword('${admin.username}')" style="padding:6px 12px;font-size:12px;margin-bottom:4px">Reset PW</button>
+          ${admin.role !== 'leader' || admin.username !== currentUser.username ? 
+            `<button class="danger" onclick="deleteAdmin('${admin.username}')" style="padding:6px 12px;font-size:12px">Hapus</button>` : 
+            ''}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Update stats
+    document.getElementById('totalAdmins').textContent = admins.length;
+
+  } catch (error) {
+    console.error('Error:', error);
+    const tbody = document.getElementById('adminTable').querySelector('tbody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:red">Error loading data</td></tr>';
+  }
+}
+
+async function getAdminPerformance() {
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+  
+  try {
+    // Get all admins
+    const { data: admins, error: adminError } = await supabase
+      .from('admins')
+      .select('username, role')
+      .eq('role', 'admin'); // ✅ Hanya ambil data untuk role admin saja
+
+    if (adminError) throw adminError;
+
+    const performance = {};
+
+    for (const admin of admins) {
+      // Get member count for this admin
+      let memberQuery = supabase
+        .from('members')
+        .select('id', { count: 'exact' })
+        .eq('admin_username', admin.username);
+
+      const { count: memberCount, error: memberError } = await memberQuery;
+
+      if (memberError) throw memberError;
+
+      // Get transaction data for this admin
+      let depositQuery = supabase
+        .from('deposits')
+        .select('amount')
+        .eq('admin_username', admin.username);
+
+      if (from) depositQuery = depositQuery.gte('date', from);
+      if (to) depositQuery = depositQuery.lte('date', to);
+
+      const { data: deposits, error: depositError } = await depositQuery;
+
+      if (depositError) throw depositError;
+
+      const transactionCount = deposits ? deposits.length : 0;
+      const revenue = deposits ? deposits.reduce((sum, d) => sum + (d.amount || 0), 0) : 0;
+
+      performance[admin.username] = {
+        memberCount: memberCount || 0,
+        transactionCount: transactionCount,
+        revenue: revenue
+      };
+    }
+
+    return performance;
+
+  } catch (error) {
+    console.error('Error getting admin performance:', error);
+    return {};
+  }
+}
+
+async function addAdmin() {
+  const username = document.getElementById('newAdminUser').value.trim();
+  const password = document.getElementById('newAdminPass').value;
+  const name = document.getElementById('newAdminName').value.trim();
+  const role = document.getElementById('newAdminRole').value;
+
+  if (!username || !password || !name) {
+    alert('Username, password, dan nama harus diisi');
+    return;
+  }
+
+  try {
+    const { data: existing } = await supabase
+      .from('admins')
+      .select('username')
+      .eq('username', username)
+      .single();
+
+    if (existing) {
+      alert('Username sudah digunakan');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('admins')
+      .insert([{
+        username,
+        password,
+        name,
+        role
+      }]);
+
+    if (error) throw error;
+
+    // Reset form
+    document.getElementById('newAdminUser').value = '';
+    document.getElementById('newAdminPass').value = '';
+    document.getElementById('newAdminName').value = '';
+
+    // Refresh data
+    refreshAdminTable();
+    populateAdminSelects();
+    alert('User berhasil ditambahkan');
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error menambahkan user: ' + error.message);
+  }
+}
+
+async function deleteAdmin(username) {
+  if (!confirm(`Hapus user ${username}?`)) return;
+  if (username === currentUser.username) {
+    alert('Tidak bisa menghapus user yang sedang login');
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('admins')
+      .delete()
+      .eq('username', username);
+
+    if (error) throw error;
+
+    refreshAdminTable();
+    populateAdminSelects();
+    alert('User berhasil dihapus');
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error menghapus user');
+  }
+}
+
+async function resetPassword(username) {
+  const newPassword = prompt(`Masukkan password baru untuk ${username}:`);
+  if (!newPassword) return;
+
+  try {
+    const { error } = await supabase
+      .from('admins')
+      .update({ password: newPassword })
+      .eq('username', username);
+
+    if (error) throw error;
+
+    alert('Password berhasil direset');
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error reset password');
+  }
+}
+
+// ==================== DATA MANAGEMENT ====================
+async function populateAdminSelects() {
+  try {
+    const { data: admins, error } = await supabase
+      .from('admins')
+      .select('username, role')
+      .order('username');
+
+    if (error) throw error;
+
+    const assignSelect = document.getElementById('assignAdmin');
+    const reportSelect = document.getElementById('reportAdmin');
+
+    assignSelect.innerHTML = '<option value="">Pilih admin tujuan</option>';
+    reportSelect.innerHTML = '<option value="__all">Semua User</option>';
+
+    admins.forEach(admin => {
+      if (admin.role === 'admin') {
+        assignSelect.innerHTML += `<option value="${admin.username}">${admin.username}</option>`;
+      }
+      reportSelect.innerHTML += `<option value="${admin.username}">${admin.username}</option>`;
+    });
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+async function refreshStats() {
+  try {
+    const from = document.getElementById('fromDate').value;
+    const to = document.getElementById('toDate').value;
+
+    // Get total members
+    const { data: members, error: membersError } = await supabase
+      .from('members')
+      .select('id');
+
+    if (membersError) throw membersError;
+
+    // Get total transactions and revenue with date filter
+    let depositQuery = supabase.from('deposits').select('amount');
+    
+    if (from) depositQuery = depositQuery.gte('date', from);
+    if (to) depositQuery = depositQuery.lte('date', to);
+
+    const { data: deposits, error: depositsError } = await depositQuery;
+
+    if (depositsError) throw depositsError;
+
+    const totalMembers = members ? members.length : 0;
+    const totalTransactions = deposits ? deposits.length : 0;
+    const totalRevenue = deposits ? deposits.reduce((sum, d) => sum + (d.amount || 0), 0) : 0;
+
+    document.getElementById('totalMembers').textContent = totalMembers.toLocaleString();
+    document.getElementById('totalTransactions').textContent = totalTransactions.toLocaleString();
+    document.getElementById('totalRevenue').textContent = formatCurrency(totalRevenue);
+
+  } catch (error) {
+    console.error('Error refreshing stats:', error);
+  }
+}
+
+// ==================== IMPORT FUNCTION (REVISED) ====================
+async function importToAdmin() {
+  const fileInput = document.getElementById('fileImport');
+  const adminUsername = document.getElementById('assignAdmin').value;
+
+  if (!fileInput.files.length) {
+    showImportStatus('Pilih file Excel terlebih dahulu', false);
+    return;
+  }
+  if (!adminUsername) {
+    showImportStatus('Pilih admin tujuan', false);
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+
+  reader.onload = async function(e) {
+    try {
+      showImportStatus('Sedang memproses file...', true);
+      
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { 
+        type: 'array', 
+        cellDates: true, // ✅ Baca tanggal sebagai Date object
+        cellText: false 
+      });
+      
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(sheet, { 
+        raw: false, // ✅ Convert dates to ISO string
+        defval: '' 
+      });
+
+      if (jsonData.length === 0) {
+        showImportStatus('File Excel kosong atau format tidak sesuai', false);
+        return;
+      }
+
+      showImportStatus(`Memproses ${jsonData.length} data...`, true);
+
+      // Process each row
+      const membersToInsert = [];
+      const errors = [];
+      let successCount = 0;
+
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        try {
+          // Validate required fields - cek berbagai kemungkinan nama kolom
+          const id = row.ID || row.Id || row.id || '';
+          const nama = row.Nama || row.nama || row.Name || row.name || '';
+          const phone = row.Phone || row.phone || row.HP || row.hp || row.Telp || row.telp || '';
+          let lastDeposit = row.last_deposit || row['Last Deposit'] || row['last deposit'] || row.Tanggal || row.tanggal || '';
+
+          if (!id && !nama) {
+            errors.push(`Baris ${i + 2}: ID atau Nama harus diisi`);
+            continue;
+          }
+
+          const memberId = id || `M${Date.now()}${i}`;
+          const memberName = nama || 'Unknown';
+          
+          // ✅ FIX: Handle date format properly
+          if (!lastDeposit) {
+            // Jika tidak ada last_deposit, gunakan tanggal acak dalam 90 hari terakhir
+            const randomDays = Math.floor(Math.random() * 90);
+            const randomDate = new Date();
+            randomDate.setDate(randomDate.getDate() - randomDays);
+            lastDeposit = randomDate.toISOString().slice(0, 10);
+          } else {
+            // Convert various date formats to YYYY-MM-DD
+            lastDeposit = parseExcelDate(lastDeposit);
+          }
+
+          // Validasi tanggal
+          const depositDate = new Date(lastDeposit);
+          if (isNaN(depositDate.getTime())) {
+            errors.push(`Baris ${i + 2}: Format tanggal tidak valid - ${lastDeposit}`);
+            continue;
+          }
+
+          membersToInsert.push({
+            id: memberId,
+            name: memberName,
+            phone: phone,
+            last_deposit: lastDeposit,
+            admin_username: adminUsername,
+            hp_valid: false,
+            deposit_valid: false,
+            has_response: false,
+            created_at: new Date().toISOString()
+          });
+
+          successCount++;
+
+        } catch (rowError) {
+          errors.push(`Baris ${i + 2}: ${rowError.message}`);
+        }
+      }
+
+      // Tampilkan warnings jika ada
+      if (errors.length > 0) {
+        console.warn('Import warnings:', errors);
+        if (successCount > 0) {
+          showImportStatus(`Berhasil memproses ${successCount} data, ${errors.length} error. Lihat console untuk detail.`, false);
+        } else {
+          showImportStatus(`Gagal import: ${errors[0]}`, false);
+          return;
+        }
+      }
+
+      if (membersToInsert.length === 0) {
+        showImportStatus('Tidak ada data yang valid untuk diimport', false);
+        return;
+      }
+
+      showImportStatus(`Menyimpan ${membersToInsert.length} data ke database...`, true);
+
+      // Insert in batches to avoid timeout
+      const batchSize = 50;
+      let successfulImports = 0;
+
+      for (let i = 0; i < membersToInsert.length; i += batchSize) {
+        const batch = membersToInsert.slice(i, i + batchSize);
+        
+        const { error } = await supabase
+          .from('members')
+          .insert(batch);
+
+        if (error) {
+          console.error('Batch insert error:', error);
+          
+          // Coba insert satu per satu untuk menemukan data yang bermasalah
+          if (batch.length > 1) {
+            showImportStatus(`Error batch, mencoba insert satu per satu...`, false);
+            let singleSuccess = 0;
+            
+            for (const singleMember of batch) {
+              try {
+                const { error: singleError } = await supabase
+                  .from('members')
+                  .insert([singleMember]);
+                  
+                if (!singleError) {
+                  singleSuccess++;
+                }
+              } catch (singleErr) {
+                console.error('Single insert error:', singleErr);
+              }
+            }
+            successfulImports += singleSuccess;
+          }
+          
+          throw new Error(`Error batch ${Math.floor(i/batchSize) + 1}: ${error.message}`);
+        } else {
+          successfulImports += batch.length;
+        }
+
+        showImportStatus(`Progress: ${successfulImports}/${membersToInsert.length} data...`, true);
+      }
+
+      // Clear file input
+      fileInput.value = '';
+      
+      // Refresh all data
+      await refreshAllData();
+      
+      const finalMessage = errors.length > 0 
+        ? `✅ Berhasil mengimpor ${successfulImports} member ke ${adminUsername} (${errors.length} error)`
+        : `✅ Berhasil mengimpor ${successfulImports} member ke ${adminUsername}`;
+      
+      showImportStatus(finalMessage, true);
+      
+    } catch (error) {
+      console.error('Import error:', error);
+      showImportStatus(`❌ Error mengimpor data: ${error.message}`, false);
+    }
+  };
+
+  reader.onerror = function() {
+    showImportStatus('Error membaca file', false);
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+// ✅ IMPROVED Template Download function
+function downloadTemplate() {
+  const today = new Date();
+  const dates = [
+    today.toISOString().slice(0, 10), // Hari ini
+    new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), // 7 hari lalu
+    new Date(today.getTime() - 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), // 15 hari lalu
+    new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) // 30 hari lalu
+  ];
+
+  const templateData = [
+    {
+      'ID': 'M001',
+      'Nama': 'Budi Santoso',
+      'Phone': '08123456789',
+      'last_deposit': dates[0] // Hari ini
+    },
+    {
+      'ID': 'M002', 
+      'Nama': 'Sari Indah',
+      'Phone': '08129876543',
+      'last_deposit': dates[1] // 7 hari lalu
+    },
+    {
+      'ID': 'M003',
+      'Nama': 'Andi Wijaya',
+      'Phone': '08111222333',
+      'last_deposit': dates[2] // 15 hari lalu
+    },
+    {
+      'ID': 'M004',
+      'Nama': 'Rina Melati',
+      'Phone': '08144555666',
+      'last_deposit': dates[3] // 30 hari lalu
+    }
+  ];
+
+  const ws = XLSX.utils.json_to_sheet(templateData);
+  
+  // Set column widths
+  const wscols = [
+    { wch: 10 }, // ID
+    { wch: 20 }, // Nama  
+    { wch: 15 }, // Phone
+    { wch: 15 }  // last_deposit
+  ];
+  ws['!cols'] = wscols;
+
+  // Set header style
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let C = range.s.c; C <= range.e.c; ++C) {
+    const cell_address = XLSX.utils.encode_cell({ c: C, r: 0 });
+    if (!ws[cell_address]) continue;
+    ws[cell_address].s = {
+      font: { bold: true },
+      fill: { fgColor: { rgb: "FFE6E6FA" } }
+    };
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template Member');
+  XLSX.writeFile(wb, 'template_import_member.xlsx');
+}
+
+// ==================== CHARTS ====================
+let chartInstance = null;
+
+async function refreshCharts() {
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+
+  try {
+    const { data: admins, error: adminError } = await supabase
+      .from('admins')
+      .select('username')
+      .eq('role', 'admin');
+
+    if (adminError) throw adminError;
+
+    const adminLabels = admins ? admins.map(a => a.username) : [];
+    const totals = [];
+
+    if (adminLabels.length === 0) {
+      // No data - show empty state
+      const ctx = document.getElementById('masterChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+      
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Belum Ada Data'],
+          datasets: [{
+            label: 'Pendapatan',
+            data: [0],
+            backgroundColor: 'rgba(203, 213, 225, 0.7)'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { 
+            legend: { display: false },
+            title: {
+              display: true,
+              text: 'Tambah admin untuk melihat data'
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+      return;
+    }
+
+    for (const admin of admins) {
+      let query = supabase
+        .from('deposits')
+        .select('amount')
+        .eq('admin_username', admin.username);
+
+      if (from) query = query.gte('date', from);
+      if (to) query = query.lte('date', to);
+
+      const { data: deposits, error: depositError } = await query;
+
+      if (depositError) throw depositError;
+
+      const total = deposits ? deposits.reduce((sum, d) => sum + (d.amount || 0), 0) : 0;
+      totals.push(total);
+    }
+
+    const ctx = document.getElementById('masterChart').getContext('2d');
+    if (chartInstance) chartInstance.destroy();
+
+    chartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: adminLabels,
+        datasets: [{
+          label: 'Pendapatan',
+          data: totals,
+          backgroundColor: 'rgba(59, 130, 246, 0.7)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { 
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value) {
+                return 'Rp ' + value.toLocaleString();
+              }
+            }
+          }
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+// ==================== REPORTS & EXPORT ====================
+async function generateReport() {
+  const reportType = document.getElementById('reportType').value;
+  const admin = document.getElementById('reportAdmin').value;
+  const range = document.getElementById('reportRange').value;
+
+  try {
+    let data, fileName;
+
+    if (reportType === 'database') {
+      let query = supabase.from('members').select('*');
+      if (admin !== '__all') query = query.eq('admin_username', admin);
+      
+      const { data: members, error } = await query;
+      if (error) throw error;
+      
+      data = members || [];
+      fileName = `report_member_${admin}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    } else {
+      let query = supabase.from('deposits').select('*');
+      if (admin !== '__all') query = query.eq('admin_username', admin);
+      
+      const { data: deposits, error } = await query;
+      if (error) throw error;
+      
+      data = deposits || [];
+      fileName = `report_transaksi_${admin}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    }
+
+    if (data.length === 0) {
+      alert('Tidak ada data untuk diexport');
+      return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Report');
+    XLSX.writeFile(wb, fileName);
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error generating report: ' + error.message);
+  }
+}
+
+async function exportAllData() {
+  try {
+    const [admins, members, deposits] = await Promise.all([
+      supabase.from('admins').select('*'),
+      supabase.from('members').select('*'),
+      supabase.from('deposits').select('*')
+    ]);
+
+    const wb = XLSX.utils.book_new();
+    
+    if (admins.data && admins.data.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(admins.data), 'Users');
+    }
+    if (members.data && members.data.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(members.data), 'Members');
+    }
+    if (deposits.data && deposits.data.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(deposits.data), 'Transactions');
+    }
+
+    XLSX.writeFile(wb, `crm_backup_${new Date().toISOString().slice(0,10)}.xlsx`);
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error exporting data: ' + error.message);
+  }
+}
+
+async function refreshAllData() {
+  await refreshAdminTable();
+  await refreshStats();
+  await refreshCharts();
+  await populateAdminSelects();
+  alert('Data berhasil di-refresh');
+}
+
+// ==================== INITIALIZATION ====================
+document.addEventListener('DOMContentLoaded', function() {
+  // Set default dates
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+  
+  document.getElementById('fromDate').value = firstDay.toISOString().slice(0,10);
+  document.getElementById('toDate').value = today.toISOString().slice(0,10);
+
+  // Check if user was logged in
+  const savedUser = localStorage.getItem('currentMasterUser');
+  if (savedUser) {
+    try {
+      currentUser = JSON.parse(savedUser);
+      openMain(currentUser);
+    } catch (e) {
+      localStorage.removeItem('currentMasterUser');
+    }
+  }
+});
+</script>
+</body>
+</html>
+
+

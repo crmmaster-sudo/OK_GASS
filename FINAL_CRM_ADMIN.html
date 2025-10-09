@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CRM ADMIN</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#f3f8ff; --card:#fff; --accent:#3b82f6; --muted:#666;
+    --success:#16a34a; --danger:#ef4444;
+  }
+  *{box-sizing:border-box;font-family:Inter,system-ui,sans-serif}
+  body{margin:0;background:var(--bg);color:#1b1b1b}
+  header{padding:16px 24px;display:flex;align-items:center;justify-content:space-between;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.05)}
+  .app{max-width:1200px;margin:20px auto;padding:20px}
+  .card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 4px 12px rgba(0,0,0,.06)}
+  input,select{width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;margin-top:6px}
+  button{padding:8px 16px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer;font-size:14px}
+  button.danger{background:var(--danger)}
+  .cols{display:grid;grid-template-columns:1fr 380px;gap:20px;margin-top:20px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:10px 8px;border-bottom:1px solid #eee;text-align:left;vertical-align:middle}
+  .badge{padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600}
+  .aktif{background:#dcfce7;color:#166534}
+  .normal{background:#fef9c3;color:#854d0e}
+  .jarang{background:#fee2e2;color:#991b1b}
+  .filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0;align-items:center}
+  .search-bar{display:flex;gap:8px;margin-bottom:16px;align-items:center}
+  .summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px}
+  .summary-card{text-align:center;background:#f9fafb;box-shadow:none;padding:20px}
+  .summary-value{font-size:24px;font-weight:700;margin:8px 0}
+  .summary-label{font-size:14px;color:#666;margin-bottom:4px}
+  .chart-container{margin:20px 0;min-height:200px}
+  input[type="checkbox"]{transform:scale(1.2);margin:0 4px}
+  th{background:#f8fafc;font-weight:600;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div style="font-weight:700;font-size:18px">CRM ADMIN</div>
+  <div id="signedOut"><button onclick="showLogin()">Login</button></div>
+  <div id="signedIn" style="display:none;align-items:center;gap:12px">
+    <div id="adminName"></div>
+    <button onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<div class="app">
+  <!-- LOGIN -->
+  <div id="loginBox" class="card" style="max-width:400px;margin:80px auto">
+    <h2 style="text-align:center;margin-bottom:20px">Login Admin</h2>
+    <input id="loginUser" placeholder="Username" value="admin1" style="margin-bottom:12px"/>
+    <input id="loginPass" type="password" placeholder="Password" value="admin123" style="margin-bottom:16px"/>
+    <button onclick="doLogin()" style="width:100%;padding:12px">Masuk</button>
+    <div id="loginMsg" style="color:red;margin-top:12px;text-align:center"></div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="mainUI" style="display:none">
+    <!-- Dashboard Pendapatan -->
+    <div class="card">
+      <h3 style="margin-bottom:16px">Dashboard Pendapatan</h3>
+      
+      <div class="filter-bar">
+        <input type="date" id="fromDate" style="width:150px"/>
+        <input type="date" id="toDate" style="width:150px"/>
+        <button onclick="refreshChart()">Terapkan</button>
+        <button onclick="resetFilter()">Reset</button>
+        <button onclick="exportData()">Export</button>
+        <button onclick="importFromMaster()">Terima dari Master</button>
+        <button class="danger" onclick="resetAdminData()">Reset Data</button>
+      </div>
+
+      <div class="chart-container">
+        <canvas id="omsetChart" height="150"></canvas>
+      </div>
+      
+      <div class="summary-grid">
+        <div class="card summary-card">
+          <div class="summary-label">Total Jumlah Deposit Hari Ini</div>
+          <div id="totalDepositToday" class="summary-value" style="color:#3b82f6;">Rp 0</div>
+          <small id="summaryDate" style="color:#666;">-</small>
+        </div>
+        <div class="card summary-card">
+          <div class="summary-label">Total Member Deposit Hari Ini</div>
+          <div id="totalMemberToday" class="summary-value" style="color:#16a34a;">0 Member</div>
+          <small style="color:#666;">Melakukan deposit hari ini</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <!-- Database Member -->
+      <div class="card">
+        <h3 style="margin-bottom:16px">Database Member</h3>
+        <p id="memberCount" style="font-weight:600;color:#555;margin-bottom:16px">Total data: 0 member</p>
+        
+        <div class="search-bar">
+          <input id="searchMember" placeholder="Cari ID/Nama..." oninput="refreshMembers()" 
+                 style="padding:8px 12px;width:250px;border:1px solid #ddd;border-radius:8px">
+          <select id="statusFilter" onchange="refreshMembers()" 
+                  style="padding:8px 12px;width:150px;border:1px solid #ddd;border-radius:8px">
+            <option value="">Semua Status</option>
+            <option value="aktif">Aktif</option>
+            <option value="normal">Normal</option>
+            <option value="jarang">Jarang</option>
+          </select>
+        </div>
+
+        <div style="overflow-x:auto; border:1px solid #eee; border-radius:8px;">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nama</th>
+                <th>HP</th>
+                <th>Last Deposit</th>
+                <th>Status</th>
+                <th>HP Valid</th>
+                <th>No HP Tidak Valid</th>
+                <th>Sudah Deposit</th>
+                <th>Belum Deposit</th>
+                <th>Ada Respon</th>
+                <th>Tidak Respon</th>
+              </tr>
+            </thead>
+            <tbody id="memberTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tambah Deposit & Riwayat -->
+      <div>
+        <div class="card">
+          <h3 style="margin-bottom:16px">Tambah Deposit</h3>
+          <label style="font-weight:500;display:block;margin-bottom:4px">Pilih Member</label>
+          <select id="depositMember" style="margin-bottom:12px">
+            <option value="">-- pilih --</option>
+          </select>
+          
+          <label style="font-weight:500;display:block;margin-bottom:4px">Atau Nama Manual</label>
+          <input id="depositManual" placeholder="Nama luar database" style="margin-bottom:12px"/>
+          
+          <label style="font-weight:500;display:block;margin-bottom:4px">Nominal</label>
+          <input id="depositAmount" type="text" placeholder="100000" style="margin-bottom:16px"/>
+          
+          <button onclick="addDeposit()" style="width:100%;padding:12px">Tambah Deposit</button>
+        </div>
+
+        <div class="card" style="margin-top:20px">
+          <h4 style="margin-bottom:16px">Riwayat Deposit</h4>
+          <div style="overflow-x:auto; border:1px solid #eee; border-radius:8px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tgl</th>
+                  <th>Member</th>
+                  <th>Jumlah</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="depositTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== KONFIGURASI SUPA BASE ====================
+const SUPABASE_URL = 'https://rmuhtxhcnqyzezbfixdp.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtdWh0eGhjbnF5emV6YmZpeGRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwMTk4NzMsImV4cCI6MjA3NTU5NTg3M30.O2wTTp4J866_r9Hbb3D4PY4FFWb5ByhDRYXgslcYptA';
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let currentAdmin = null;
+let state = { members: [], deposits: [] };
+
+// ==================== UTILITY FUNCTIONS ====================
+function uid() { 
+  return 'id' + Math.random().toString(36).slice(2, 9); 
+}
+
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0
+  }).format(amount);
+}
+
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+}
+
+function getMemberStatus(lastDeposit) {
+  const last = new Date(lastDeposit);
+  const now = new Date();
+  const diff = (now - last) / (1000 * 60 * 60 * 24);
+  
+  if (diff <= 7) return 'aktif';
+  if (diff <= 30) return 'normal';
+  return 'jarang';
+}
+
+// ==================== AUTHENTICATION ====================
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+
+  try {
+    const { data: admins, error } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('username', username)
+      .eq('password', password);
+
+    if (error) throw error;
+
+    if (admins && admins.length > 0) {
+      currentAdmin = admins[0];
+      document.getElementById('loginMsg').textContent = 'Login sukses';
+      setTimeout(() => openMain(currentAdmin), 500);
+    } else {
+      document.getElementById('loginMsg').textContent = 'Login gagal. Username/password salah';
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    document.getElementById('loginMsg').textContent = 'Error saat login';
+  }
+}
+
+function showLogin() {
+  document.getElementById('mainUI').style.display = 'none';
+  document.getElementById('loginBox').style.display = 'block';
+  document.getElementById('signedIn').style.display = 'none';
+  document.getElementById('signedOut').style.display = 'block';
+}
+
+function logout() {
+  currentAdmin = null;
+  localStorage.removeItem('currentAdminUser');
+  showLogin();
+}
+
+function openMain(user) {
+  document.getElementById('loginBox').style.display = 'none';
+  document.getElementById('mainUI').style.display = 'block';
+  document.getElementById('signedIn').style.display = 'flex';
+  document.getElementById('signedOut').style.display = 'none';
+  document.getElementById('adminName').textContent = user.name;
+
+  localStorage.setItem('currentAdminUser', JSON.stringify(user));
+  
+  loadAdminData();
+}
+
+// ==================== DATA MANAGEMENT ====================
+async function loadAdminData() {
+  if (!currentAdmin) return;
+
+  try {
+    // Load members
+    const { data: members, error: membersError } = await supabase
+      .from('members')
+      .select('*')
+      .eq('admin_username', currentAdmin.username);
+
+    if (membersError) throw membersError;
+
+    // Load deposits
+    const { data: deposits, error: depositsError } = await supabase
+      .from('deposits')
+      .select('*')
+      .eq('admin_username', currentAdmin.username);
+
+    if (depositsError) throw depositsError;
+
+    state.members = members || [];
+    state.deposits = deposits || [];
+
+    refreshMembers();
+    refreshDeposits();
+    refreshChart();
+    refreshDailySummary();
+
+  } catch (error) {
+    console.error('Error loading data:', error);
+  }
+}
+
+async function refreshMembers() {
+  const tb = document.getElementById('memberTable');
+  if (!tb) return;
+
+  const keyword = document.getElementById('searchMember')?.value.toLowerCase() || "";
+  const statusFilter = document.getElementById('statusFilter')?.value || "";
+
+  const filtered = state.members.filter(m => {
+    const matchKeyword = m.id.toLowerCase().includes(keyword) || m.name.toLowerCase().includes(keyword);
+    const status = getMemberStatus(m.last_deposit);
+    const matchStatus = !statusFilter || status === statusFilter;
+    return matchKeyword && matchStatus;
+  });
+
+  tb.innerHTML = '';
+
+  if (filtered.length === 0) {
+    tb.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:20px;color:#666">Tidak ada data member</td></tr>`;
+    document.getElementById("memberCount").textContent = `Total data: 0 member`;
+    return;
+  }
+
+  filtered.forEach(m => {
+    const status = getMemberStatus(m.last_deposit);
+    const statusClass = status === 'aktif' ? 'aktif' : status === 'normal' ? 'normal' : 'jarang';
+    
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${m.id}</td>
+      <td>${m.name}</td>
+      <td>${m.phone}</td>
+      <td>${m.last_deposit}</td>
+      <td><span class="badge ${statusClass}">${status}</span></td>
+      <td style="text-align:center"><input type="checkbox" ${m.hp_valid ? 'checked' : ''} onchange="toggleMemberField('${m.id}', 'hp_valid', this.checked)"></td>
+      <td style="text-align:center"><input type="checkbox" ${!m.hp_valid ? 'checked' : ''} onchange="toggleMemberField('${m.id}', 'hp_valid', !this.checked)"></td>
+      <td style="text-align:center"><input type="checkbox" ${m.deposit_valid ? 'checked' : ''} onchange="toggleMemberField('${m.id}', 'deposit_valid', this.checked)"></td>
+      <td style="text-align:center"><input type="checkbox" ${!m.deposit_valid ? 'checked' : ''} onchange="toggleMemberField('${m.id}', 'deposit_valid', !this.checked)"></td>
+      <td style="text-align:center"><input type="checkbox" ${m.has_response ? 'checked' : ''} onchange="toggleMemberField('${m.id}', 'has_response', this.checked)"></td>
+      <td style="text-align:center"><input type="checkbox" ${!m.has_response ? 'checked' : ''} onchange="toggleMemberField('${m.id}', 'has_response', !this.checked)"></td>
+    `;
+    tb.appendChild(tr);
+  });
+
+  document.getElementById("memberCount").textContent = `Total data: ${filtered.length} member`;
+
+  // Update deposit member dropdown
+  const sel = document.getElementById('depositMember');
+  sel.innerHTML = '<option value="">-- pilih --</option>';
+  state.members.forEach(m => {
+    sel.insertAdjacentHTML('beforeend', `<option value="${m.id}">${m.id} - ${m.name}</option>`);
+  });
+}
+
+async function toggleMemberField(memberId, field, value) {
+  try {
+    const { error } = await supabase
+      .from('members')
+      .update({ [field]: value })
+      .eq('id', memberId)
+      .eq('admin_username', currentAdmin.username);
+
+    if (error) throw error;
+
+    // Update local state
+    const member = state.members.find(m => m.id === memberId);
+    if (member) {
+      member[field] = value;
+    }
+  } catch (error) {
+    console.error('Error updating member:', error);
+  }
+}
+
+// ==================== DEPOSIT MANAGEMENT ====================
+async function addDeposit() {
+  const memberId = document.getElementById('depositMember').value;
+  const manualName = document.getElementById('depositManual').value.trim();
+  const amount = getCleanAmount();
+
+  if (!amount) {
+    alert('Nominal wajib diisi');
+    return;
+  }
+
+  let memberName = '';
+  let finalMemberId = memberId;
+
+  if (memberId) {
+    const member = state.members.find(m => m.id === memberId);
+    if (member) {
+      memberName = member.name;
+    }
+  } else if (manualName) {
+    memberName = manualName;
+    finalMemberId = 'manual_' + uid();
+  } else {
+    alert('Pilih member atau isi nama manual');
+    return;
+  }
+
+  try {
+    const depositData = {
+      id: 'd' + uid(),
+      member_id: finalMemberId,
+      member_name: memberName,
+      amount: amount,
+      date: new Date().toISOString().slice(0, 10),
+      admin_username: currentAdmin.username
+    };
+
+    const { error } = await supabase
+      .from('deposits')
+      .insert([depositData]);
+
+    if (error) throw error;
+
+    // Update local state
+    state.deposits.push(depositData);
+
+    // Update member's last deposit if it's a real member
+    if (memberId && !finalMemberId.startsWith('manual_')) {
+      await supabase
+        .from('members')
+        .update({ last_deposit: depositData.date })
+        .eq('id', memberId)
+        .eq('admin_username', currentAdmin.username);
+
+      // Update local state
+      const member = state.members.find(m => m.id === memberId);
+      if (member) {
+        member.last_deposit = depositData.date;
+      }
+    }
+
+    // Clear form
+    document.getElementById('depositAmount').value = '';
+    document.getElementById('depositManual').value = '';
+    document.getElementById('depositMember').value = '';
+
+    refreshDeposits();
+    refreshChart();
+    refreshDailySummary();
+    refreshMembers(); // Refresh to update last deposit dates
+
+    alert('Deposit berhasil ditambahkan!');
+
+  } catch (error) {
+    console.error('Error adding deposit:', error);
+    alert('Error menambahkan deposit');
+  }
+}
+
+function refreshDeposits() {
+  const tb = document.getElementById('depositTable');
+  if (!tb) return;
+
+  tb.innerHTML = '';
+
+  if (state.deposits.length === 0) {
+    tb.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:#666">Belum ada riwayat deposit</td></tr>`;
+    return;
+  }
+
+  // Sort deposits by date (newest first)
+  const sortedDeposits = [...state.deposits].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  sortedDeposits.forEach(d => {
+    const tr = document.createElement('tr');
+    const memberDisplay = d.member_id.startsWith('manual_') ? d.member_name : d.member_id;
+    
+    tr.innerHTML = `
+      <td>${d.date}</td>
+      <td>${memberDisplay}</td>
+      <td>${formatCurrency(d.amount)}</td>
+      <td>
+        <button onclick="editDeposit('${d.id}')" style="margin-right:4px">Edit</button>
+        <button class="danger" onclick="deleteDeposit('${d.id}')">Hapus</button>
+      </td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
+async function editDeposit(depositId) {
+  const deposit = state.deposits.find(d => d.id === depositId);
+  if (!deposit) return;
+
+  const newAmount = prompt('Masukkan nominal baru:', deposit.amount);
+  if (!newAmount) return;
+
+  const cleanAmount = Number(newAmount.replace(/\D/g, ''));
+
+  try {
+    const { error } = await supabase
+      .from('deposits')
+      .update({ amount: cleanAmount })
+      .eq('id', depositId)
+      .eq('admin_username', currentAdmin.username);
+
+    if (error) throw error;
+
+    // Update local state
+    deposit.amount = cleanAmount;
+
+    refreshDeposits();
+    refreshChart();
+    refreshDailySummary();
+
+  } catch (error) {
+    console.error('Error editing deposit:', error);
+    alert('Error mengedit deposit');
+  }
+}
+
+async function deleteDeposit(depositId) {
+  if (!confirm('Hapus deposit ini?')) return;
+
+  try {
+    const { error } = await supabase
+      .from('deposits')
+      .delete()
+      .eq('id', depositId)
+      .eq('admin_username', currentAdmin.username);
+
+    if (error) throw error;
+
+    // Update local state
+    state.deposits = state.deposits.filter(d => d.id !== depositId);
+
+    refreshDeposits();
+    refreshChart();
+    refreshDailySummary();
+
+  } catch (error) {
+    console.error('Error deleting deposit:', error);
+    alert('Error menghapus deposit');
+  }
+}
+
+// ==================== CHART & DASHBOARD ====================
+let chartInstance = null;
+
+function refreshChart() {
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+
+  const filteredDeposits = state.deposits.filter(d => {
+    if (from && d.date < from) return false;
+    if (to && d.date > to) return false;
+    return true;
+  });
+
+  // Group by date
+  const grouped = {};
+  filteredDeposits.forEach(d => {
+    grouped[d.date] = (grouped[d.date] || 0) + d.amount;
+  });
+
+  const labels = Object.keys(grouped).sort();
+  const data = labels.map(date => grouped[date]);
+
+  const ctx = document.getElementById('omsetChart').getContext('2d');
+  
+  if (chartInstance) {
+    chartInstance.destroy();
+  }
+
+  if (labels.length === 0) {
+    // Show empty state
+    chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ['No Data'],
+        datasets: [{
+          label: 'Omset',
+          data: [0],
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          title: {
+            display: true,
+            text: 'Belum ada data transaksi'
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+  } else {
+    chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Omset',
+          data: data,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          tension: 0.4,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+  }
+}
+
+function refreshDailySummary() {
+  const today = new Date().toISOString().slice(0, 10);
+  
+  const depositsToday = state.deposits.filter(d => d.date === today);
+  const totalDepositToday = depositsToday.reduce((sum, d) => sum + d.amount, 0);
+  const uniqueMembersToday = new Set(depositsToday.map(d => d.member_id)).size;
+
+  document.getElementById('totalDepositToday').textContent = formatCurrency(totalDepositToday);
+  document.getElementById('totalMemberToday').textContent = uniqueMembersToday + ' Member';
+  document.getElementById('summaryDate').textContent = 'Per ' + formatDate(today);
+}
+
+function resetFilter() {
+  document.getElementById('fromDate').value = '';
+  document.getElementById('toDate').value = '';
+  refreshChart();
+}
+
+// ==================== IMPORT/EXPORT ====================
+function exportData() {
+  const wb = XLSX.utils.book_new();
+  
+  const membersSheet = XLSX.utils.json_to_sheet(state.members.map(m => ({
+    ID: m.id,
+    Nama: m.name,
+    HP: m.phone,
+    LastDeposit: m.last_deposit,
+    HP_Valid: m.hp_valid ? 'Ya' : 'Tidak',
+    Deposit_Valid: m.deposit_valid ? 'Ya' : 'Tidak',
+    Ada_Respon: m.has_response ? 'Ya' : 'Tidak'
+  })));
+  
+  const depositsSheet = XLSX.utils.json_to_sheet(state.deposits.map(d => ({
+    ID: d.id,
+    Member: d.member_name,
+    Amount: d.amount,
+    Date: d.date
+  })));
+  
+  XLSX.utils.book_append_sheet(wb, membersSheet, "Members");
+  XLSX.utils.book_append_sheet(wb, depositsSheet, "Deposits");
+  XLSX.writeFile(wb, `crm_admin_${currentAdmin.username}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+async function importFromMaster() {
+  alert('Fitur import dari Master akan tersedia setelah setup Master selesai');
+}
+
+async function resetAdminData() {
+  if (!confirm('Hapus semua data admin?')) return;
+
+  try {
+    // Delete all deposits
+    const { error: depositError } = await supabase
+      .from('deposits')
+      .delete()
+      .eq('admin_username', currentAdmin.username);
+
+    if (depositError) throw depositError;
+
+    // Delete all members
+    const { error: memberError } = await supabase
+      .from('members')
+      .delete()
+      .eq('admin_username', currentAdmin.username);
+
+    if (memberError) throw memberError;
+
+    // Reset local state
+    state.members = [];
+    state.deposits = [];
+
+    refreshMembers();
+    refreshDeposits();
+    refreshChart();
+    refreshDailySummary();
+
+    alert('Data admin berhasil direset');
+
+  } catch (error) {
+    console.error('Error resetting data:', error);
+    alert('Error reset data');
+  }
+}
+
+// ==================== FORMATTING ====================
+const inputAmt = document.getElementById('depositAmount');
+if (inputAmt) {
+  inputAmt.addEventListener('input', function(e) {
+    let value = this.value.replace(/\D/g, '');
+    if (!value) { 
+      this.value = ''; 
+      return; 
+    }
+    this.value = new Intl.NumberFormat('id-ID').format(value);
+  });
+}
+
+function getCleanAmount() {
+  let raw = document.getElementById('depositAmount').value;
+  return Number(raw.replace(/\./g, ''));
+}
+
+// ==================== INITIALIZATION ====================
+document.addEventListener('DOMContentLoaded', function() {
+  // Set default dates
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+  
+  document.getElementById('fromDate').value = firstDay.toISOString().slice(0, 10);
+  document.getElementById('toDate').value = today.toISOString().slice(0, 10);
+
+  // Check if user was logged in
+  const savedUser = localStorage.getItem('currentAdminUser');
+  if (savedUser) {
+    try {
+      currentAdmin = JSON.parse(savedUser);
+      openMain(currentAdmin);
+    } catch (e) {
+      localStorage.removeItem('currentAdminUser');
+    }
+  }
+});
+</script>
+</body>
+</html>
+
+
